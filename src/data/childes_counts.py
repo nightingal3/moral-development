@@ -1,7 +1,9 @@
 from collections import Counter
+import csv
 import string
 from typing import List
 
+from nltk.stem import WordNetLemmatizer
 import pandas as pd
 import pylangacq
 import pdb
@@ -59,16 +61,14 @@ corpora = [
     "Weist.zip"
 ]
 
-categories = read_mfd("./data/mfd.dic")
-wildcard_categories = {cat: val for cat, val in categories.items() if cat[-1] == "*"}
-pure_categories = {cat: val for cat, val in categories.items() if cat[-1] != "*"}
-
-positive_cats = ["HarmVirtue", "FairnessVirtue", "IngroupVirtue", "AuthorityVirtue", "PurityVirtue"]
-negative_cats = ["HarmVice", "FairnessVice", "IngroupVice", "AuthorityVice", "PurityVice"]
+positive_cats = ["HarmVirtue", "FairnessVirtue", "IngroupVirtue", "AuthorityVirtue", "PurityVirtue", "care.virtue", "fairness.virtue",
+"loyalty.virtue", "authority.virtue", "sanctity.virtue"]
+negative_cats = ["HarmVice", "FairnessVice", "IngroupVice", "AuthorityVice", "PurityVice", "care.vice", "fairness.vice",
+"loyalty.vice", "authority.vice", "sanctity.vice"]
 
 base_url = "https://childes.talkbank.org/data/Eng-NA/"
 
-def read_all_corpora(corpora_list: List, out_filename: str = "data/childes-dict.p", append_pos: bool = False) -> tuple:
+def read_all_corpora(corpora_list: List, out_filename: str = "data/childes-dict.p", append_pos: bool = False, lemmatize: bool = True) -> tuple:
     """Reads a specified list of corpora from CHILDES and returns data tagged by age.
 
     Args:
@@ -80,13 +80,15 @@ def read_all_corpora(corpora_list: List, out_filename: str = "data/childes-dict.
     """
     corpora_child = {}
     corpora_parents = {}
+    if lemmatize:
+        lemmatizer = WordNetLemmatizer()
 
     for corpus in corpora_list:
         print(corpus)
         url = f"{base_url}/{corpus}"
         chats = pylangacq.read_chat(url)
         ages = chats.ages()
-
+        #pdb.set_trace()
         if append_pos:
             tokens_by_files_chi = chats.tokens(participants="CHI", by_files=True)
             tokens_by_files_pa = chats.tokens(participants={"MOT", "FAT"}, by_files=True)
@@ -95,18 +97,29 @@ def read_all_corpora(corpora_list: List, out_filename: str = "data/childes-dict.
             corpora_parents[corpus[:-4]] = {}
 
             for age, tokens_child, tokens_parents in zip(ages, tokens_by_files_chi, tokens_by_files_pa):
-                if age in corpora_child[corpus[:-4]]:
-                    for item_c, item_p in zip(tokens_child, tokens_parents):
-                        child_word, child_pos = item_c.word, item_c.pos
-                        parent_word, parent_pos = item_p.word, item_p.pos
+                for item_c in tokens_child:
+                    child_word, child_pos = item_c.word, item_c.pos
+                    if child_word in string.punctuation:
+                        continue
+                    if lemmatize:
+                        child_word = lemmatizer.lemmatize(child_word)
+
+                    if age in corpora_child[corpus[:-4]]:
                         corpora_child[corpus[:-4]][age].append((child_word, child_pos))
-                        corpora_parents[corpus[:-4]][age].append((parent_word, parent_pos))
-                else:
-                    for item_c, item_p in zip(tokens_child, tokens_parents):
-                        child_word, child_pos = item_c.word, item_c.pos
-                        parent_word, parent_pos = item_p.word, item_p.pos
+                    else:
                         corpora_child[corpus[:-4]][age] = [(child_word, child_pos)]
+
+                for item_p in tokens_parents:
+                    parent_word, parent_pos = item_p.word, item_p.pos
+                    if parent_word in string.punctuation:
+                        continue
+                    if lemmatize:
+                        parent_word = lemmatizer.lemmatize(parent_word)
+                    if age in corpora_parents[corpus[:-4]]:
+                        corpora_parents[corpus[:-4]][age].append((parent_word, parent_pos))
+                    else:
                         corpora_parents[corpus[:-4]][age] = [(parent_word, parent_pos)]
+
         else:
             words_by_files_chi = chats.words(participants="CHI", by_files=True)
             words_by_files_pa = chats.words(participants={"MOT", "FAT"}, by_files=True)
@@ -144,6 +157,8 @@ def find_mfd_childes_intersection(parent_child_dict: dict, mode: str = "percent"
         parent_dict = parent_child_dict["parent"]
         child_dict = parent_child_dict["child"]
         for age in child_dict[corpus]:
+            if corpus == "Brown" and age == (5, 1, 6):
+                pdb.set_trace()
             child_no_punct = [item for item in child_dict[corpus][age] if item not in string.punctuation]
             parent_no_punct = [item for item in parent_dict[corpus][age] if item not in string.punctuation]
             moral_words_child = []
@@ -169,7 +184,7 @@ def find_mfd_childes_intersection(parent_child_dict: dict, mode: str = "percent"
         return moral_words/total_words
     return moral_words
 
-def moral_categories_over_time(parent_child_dict: dict, with_pos: bool = False) -> pd.DataFrame:
+def moral_categories_over_time(parent_child_dict: dict, pure_categories: dict, wildcard_categories: dict, with_pos: bool = False) -> pd.DataFrame:
     years = []
     words = []
     pos = []
@@ -181,24 +196,31 @@ def moral_categories_over_time(parent_child_dict: dict, with_pos: bool = False) 
     for corpus in parent_child_dict["parent"]:
         parent_dict = parent_child_dict["parent"]
         child_dict = parent_child_dict["child"]
+        print(corpus)
+        print("child")
         for age in child_dict[corpus]:
+            print(age)
+            #if corpus == "Bliss" and age == (5, 4, 0):
+                #pdb.set_trace()
             year, month, _ = age
             year_frac = year + (month/12)
             if with_pos:
                 child_no_punct = [item for item in child_dict[corpus][age] if item[0] not in string.punctuation]
-                parent_no_punct = [item for item in parent_dict[corpus][age] if item[0] not in string.punctuation]
             else:
                 child_no_punct = [item for item in child_dict[corpus][age] if item not in string.punctuation]
-                parent_no_punct = [item for item in parent_dict[corpus][age] if item not in string.punctuation]
 
             for item in child_no_punct:
+                if with_pos:
+                    word = item[0]
+                else:
+                    word = item
                 category = None
-                if item in pure_categories:
-                    category = categories[item]
-                elif any(key[:-1] in item for key in wildcard_categories):
+                if word in pure_categories:
+                    category = pure_categories[word]
+                elif any(key[:-1] in word for key in wildcard_categories):
                     for key in wildcard_categories:
-                        if key[:-1] in item:
-                            category = categories[key]
+                        if key[:-1] in word:
+                            category = wildcard_categories[key]
                 if category == None:
                     years.append(year_frac)
                     if with_pos:
@@ -221,34 +243,50 @@ def moral_categories_over_time(parent_child_dict: dict, with_pos: bool = False) 
                         speech_categories.append(cat)
                         identity.append("child")
 
-                        if "Virtue" in cat:
+                        if "virtue" in cat.lower():
                             sentiment.append("pos")
-                        elif "Vice" in cat:
+                        elif "vice" in cat.lower():
                             sentiment.append("neg")
                         else:
                             sentiment.append("neu")
                         
-                        if "Harm" in cat:
+                        if "Harm" in cat or "care" in cat:
                             moral_type.append("harm")
-                        elif "Fairness" in cat:
+                        elif "Fairness" in cat or "fairness" in cat:
                             moral_type.append("fairness")
-                        elif "Ingroup" in cat:
+                        elif "Ingroup" in cat or "loyalty" in cat:
                             moral_type.append("loyalty")
-                        elif "Authority" in cat:
+                        elif "Authority" in cat or "authority" in cat:
                             moral_type.append("authority")
-                        elif "Purity" in cat:
+                        elif "Purity" in cat or "sanctity" in cat:
                             moral_type.append("purity")
                         else:
                             moral_type.append("other")
-            
+        print("parent")
+        for age in parent_dict[corpus]:
+            print(age)
+            if age == None:
+                continue
+            year, month, _ = age
+            year_frac = year + (month/12)
+
+            if with_pos:
+                parent_no_punct = [item for item in parent_dict[corpus][age] if item[0] not in string.punctuation]
+            else:
+                parent_no_punct = [item for item in parent_dict[corpus][age] if item not in string.punctuation]
+
             for item in parent_no_punct:
+                if with_pos:
+                    word = item[0]
+                else:
+                    word = item
                 category = None
-                if item in pure_categories:
-                    category = categories[item]
-                elif any(key[:-1] in item for key in wildcard_categories):
+                if word in pure_categories:
+                    category = pure_categories[word]
+                elif any(key[:-1] in word for key in wildcard_categories):
                     for key in wildcard_categories:
                         if key[:-1] in item:
-                            category = categories[key]
+                            category = wildcard_categories[key]
                 if category == None:
                     years.append(year_frac)
                     if with_pos:
@@ -271,34 +309,82 @@ def moral_categories_over_time(parent_child_dict: dict, with_pos: bool = False) 
                         speech_categories.append(cat)
                         identity.append("parent")
 
-                        if "Virtue" in cat:
+                        if "Virtue" in cat.lower():
                             sentiment.append("pos")
-                        elif "Vice" in cat:
+                        elif "Vice" in cat.lower():
                             sentiment.append("neg")
                         else:
                             sentiment.append("neu")
                         
-                        if "Harm" in cat:
+                        if "Harm" in cat or "care" in cat:
                             moral_type.append("harm")
-                        elif "Fairness" in cat:
+                        elif "Fairness" in cat or "fairness" in cat:
                             moral_type.append("fairness")
-                        elif "Ingroup" in cat:
+                        elif "Ingroup" in cat or "loyalty" in cat:
                             moral_type.append("loyalty")
-                        elif "Authority" in cat:
+                        elif "Authority" in cat or "authority" in cat:
                             moral_type.append("authority")
-                        elif "Purity" in cat:
+                        elif "Purity" in cat or "sanctity" in cat:
                             moral_type.append("purity")
                         else:
                             moral_type.append("other")
-        if with_pos:
-            cols = {"year": years, "identity": identity, "words": words, "pos": pos, "category": speech_categories, "sentiment": sentiment, "type": moral_type}
-        else:
-            cols = {"year": years, "identity": identity, "words": words, "category": speech_categories, "sentiment": sentiment, "type": moral_type}
-        return pd.DataFrame(cols)
+    if with_pos:
+        cols = {"year": years, "identity": identity, "words": words, "pos": pos, "category": speech_categories, "sentiment": sentiment, "type": moral_type}
+    else:
+        cols = {"year": years, "identity": identity, "words": words, "category": speech_categories, "sentiment": sentiment, "type": moral_type}
+    return pd.DataFrame(cols)
+
+def extract_modal_sentences(corpora_list: List, out_filename: str = "./data/modal_sentences.txt") -> List:
+    """Extracts all sentences containing modal verbs from specified corpora.
+
+    Args:
+        corpora_list (List): list of corpora
+
+    Returns:
+        List: [[modal sentence],....]
+    """
+    modal_sentences = []
+    modal_verbs = ["can", "cannot", "could", "must", "need to", "may", "shall", "have to", "ought to", "should", "allow", "force", "would"]
+
+    for corpus in corpora_list:
+        print(corpus)
+        url = f"{base_url}/{corpus}"
+        chats = pylangacq.read_chat(url)
+        ages = chats.ages()
+
+        words_by_files_chi = chats.utterances(participants="CHI", by_files=True)
+        words_by_files_pa = chats.utterances(participants={"MOT", "FAT"}, by_files=True)
+
+        for age, words_child, words_parents in zip(ages, words_by_files_chi, words_by_files_pa):
+            for utterance in words_child:
+                sentence = " ".join([token.word for token in utterance.tokens])
+                if any(modal_verb in sentence for modal_verb in modal_verbs):
+                    modal_sentences.append(["CHILD: " + sentence])
+            
+            for utterance in words_parents:
+                sentence = " ".join([token.word for token in utterance.tokens])
+                if any(modal_verb in sentence for modal_verb in modal_verbs):
+                    modal_sentences.append(["PARENT: " + sentence])
+
+    with open(out_filename, "w") as f:
+        writer = csv.writer(f)
+        writer.writerows(modal_sentences)
+
+    return modal_sentences
 
 
 if __name__ == "__main__":
-    #read_all_corpora(corpora, out_filename="./data/childes-dict-pos.p", append_pos=True)
-    parent_child_dict = pickle.load(open("./data/childes-dict.p", "rb"))
-    moral_categories_over_time(parent_child_dict)
+    extract_modal_sentences(corpora)
+    assert False
+    categories = read_mfd("./data/mfd.dic")
+    wildcard_categories = {cat: val for cat, val in categories.items() if cat[-1] == "*"}
+    pure_categories = {cat: val for cat, val in categories.items() if cat[-1] != "*"}
+
+    categories_v2 = read_mfd("./data/mfd2.0.dic", version=2)
+    wildcard_categories_v2 = {cat: val for cat, val in categories_v2.items() if cat[-1] == "*"}
+    pure_categories_v2 = {cat: val for cat, val in categories_v2.items() if cat[-1] != "*"}
+    #read_all_corpora(corpora, out_filename="./data/childes-dict-lemmatized.p", append_pos=True, lemmatize=True)
+    parent_child_dict = pickle.load(open("./data/childes-dict-pos.p", "rb"))
+    moral_df = moral_categories_over_time(parent_child_dict, with_pos=True, pure_categories=pure_categories, wildcard_categories=wildcard_categories)
+    moral_df.to_pickle("./data/moral_df_lemma.p")
     #find_mfd_childes_intersection(parent_child_dict)
