@@ -1,7 +1,6 @@
 import csv
-import pdb
 
-def read_mfd(in_filename: str, version: int = 1) -> dict:
+def read_mfd(in_filename: str, version: int = 1, return_categories: bool = False) -> dict:
     """Reads the LIWC file associated with the moral foundations dictionary and returns a dictionary
     mapping words/patterns to named categories.
 
@@ -33,7 +32,9 @@ def read_mfd(in_filename: str, version: int = 1) -> dict:
                 pattern = pattern_cats[0]
                 cats = pattern_cats[1:]
                 word_to_cat[pattern] = [categories[cat_num] for cat_num in cats]
-
+    
+    if return_categories:
+        return word_to_cat, categories
     return word_to_cat
 
 def mfd_overlap(mfd_1_dict: dict, mfd_2_dict: dict) -> tuple:
