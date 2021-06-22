@@ -5,7 +5,9 @@ import pdb
 
 import pandas as pd
 
-stories_dir = "data/Grimms_ Fairy Tales/Books/Books"
+stories_dir= "data/Grimms_ Fairy Tales/Books/Books"
+fb_stories_dir  = "data/Facebook Children Books/cb_train_books"
+
 
 def get_story_reading_level(story_path: str) -> tuple:
     with open(story_path, "r") as story_file:
@@ -42,4 +44,6 @@ def get_story_characteristics_in_dir(stories_dir: str, out_filename: str) -> Non
     stories_df.to_csv(out_filename, index=False)
 
 if __name__ == "__main__":
+
     get_story_characteristics_in_dir(stories_dir, "./data/stories-grimm.csv")
+    get_story_characteristics_in_dir(fb_stories_dir, "./data/stories-fb.csv")
