@@ -91,7 +91,6 @@ def read_all_corpora(corpora_list: List, out_filename: str = "data/childes-dict.
         chats = pylangacq.read_chat(url)
         ages = chats.ages()
         headers = chats.headers()
-        #pdb.set_trace()
         if append_pos:
             tokens_by_files_chi = chats.tokens(participants="CHI", by_files=True)
             tokens_by_files_mother = chats.tokens(participants="MOT", by_files=True)
@@ -158,6 +157,94 @@ def read_all_corpora(corpora_list: List, out_filename: str = "data/childes-dict.
 
     return corpora_child, corpora_parents
 
+def read_all_corpora_by_utterance(corpora_list: List, out_filename: str = "./data/childes-dict-utterances.p", append_pos: bool = False, lemmatize: bool = False) -> tuple:
+    corpora_child = {}
+    corpora_parents = {}
+    if lemmatize:
+        lemmatizer = WordNetLemmatizer()
+
+    for corpus in corpora_list:
+        print(corpus)
+        url = f"{base_url}/{corpus}"
+        chats = pylangacq.read_chat(url)
+        ages = chats.ages()
+        headers = chats.headers()
+
+        tokens_by_files_chi = chats.tokens(participants="CHI", by_files=True, by_utterances=True)
+        tokens_by_files_mother = chats.tokens(participants="MOT", by_files=True, by_utterances=True)
+        tokens_by_files_father = chats.tokens(participants="FAT", by_files=True, by_utterances=True)
+
+        corpora_child[corpus[:-4]] = {}
+        corpora_parents[corpus[:-4]] = {}
+
+        for age, header, tokens_child, tokens_mother, tokens_father in zip(ages, headers, tokens_by_files_chi, tokens_by_files_mother, tokens_by_files_father):
+            if "CHI" in header["Participants"]:
+                    child_gender = header["Participants"]["CHI"]["sex"]
+
+            for utterance in tokens_child:
+                utterance_data = []
+                for item_c in utterance:
+                    child_word, child_pos = item_c.word, item_c.pos
+                    if child_word in string.punctuation or child_word == "CLITIC":
+                        continue
+                    if lemmatize:
+                        child_word = lemmatizer.lemmatize(child_word)
+
+                    utterance_data.append((child_word, child_pos, child_gender))
+
+                if utterance_data == []:
+                    continue
+                if age in corpora_child[corpus[:-4]]:
+                    corpora_child[corpus[:-4]][age].append(utterance_data)
+                else:
+                    corpora_child[corpus[:-4]][age] = [utterance_data]
+
+            for utterance in tokens_mother:
+                utterance_data = []
+                for item_p in utterance:
+                    parent_word, parent_pos = item_p.word, item_p.pos
+                    if parent_word in string.punctuation or child_word == "CLITIC":
+                        continue
+                    if lemmatize:
+                        parent_word = lemmatizer.lemmatize(parent_word)
+
+                    utterance_data.append((parent_word, parent_pos, "female"))
+
+                if utterance_data == []:
+                    continue
+
+                if age in corpora_parents[corpus[:-4]]:
+                    corpora_parents[corpus[:-4]][age].append(utterance_data)
+                else:
+                    corpora_parents[corpus[:-4]][age] = [utterance_data]
+
+            for utterance in tokens_father:
+                utterance_data = []
+
+                for item_p in utterance:
+                    parent_word, parent_pos = item_p.word, item_p.pos
+                    if parent_word in string.punctuation or child_word == "CLITIC":
+                        continue
+                    if lemmatize:
+                        parent_word = lemmatizer.lemmatize(parent_word)
+
+                    utterance_data.append((parent_word, parent_pos, "male"))
+
+                if utterance_data == []:
+                    continue
+
+                if age in corpora_parents[corpus[:-4]]:
+                    corpora_parents[corpus[:-4]][age].append(utterance_data)
+                else:
+                    corpora_parents[corpus[:-4]][age] = [utterance_data]
+
+    with open(out_filename, "wb") as out_f:
+        combined = {"parent": corpora_parents, "child": corpora_child}
+        pickle.dump(combined, out_f)
+
+    return corpora_child, corpora_parents
+
+
 def find_mfd_childes_intersection(parent_child_dict: dict, mode: str = "percent") -> float:
     """How much overlap is there between the words in CHILDES and what's in the moral foundations dictionary?
 
@@ -196,7 +283,6 @@ def find_mfd_childes_intersection(parent_child_dict: dict, mode: str = "percent"
 
     if mode == "percent": 
         print(moral_words_list)
-        pdb.set_trace()
         return moral_words/total_words
     return moral_words
 
@@ -218,8 +304,6 @@ def moral_categories_over_time(parent_child_dict: dict, pure_categories: dict, w
         print("child")
         for age in child_dict[corpus]:
             print(age)
-            #if corpus == "Bliss" and age == (5, 4, 0):
-                #pdb.set_trace()
             year, month, _ = age
             year_frac = year + (month/12)
             if with_pos:
@@ -247,6 +331,7 @@ def moral_categories_over_time(parent_child_dict: dict, pure_categories: dict, w
                         pos.append(item[1])
                     else:
                         words.append(item)
+
                     gender.append(item[2])
                     speech_categories.append(None)
                     identity.append("child")
@@ -261,6 +346,7 @@ def moral_categories_over_time(parent_child_dict: dict, pure_categories: dict, w
                             pos.append(item[1])
                         else:
                             words.append(item)
+                        
                         gender.append(item[2])
                         speech_categories.append(cat)
                         identity.append("child")
@@ -317,6 +403,7 @@ def moral_categories_over_time(parent_child_dict: dict, pure_categories: dict, w
                         pos.append(item[1])
                     else:
                         words.append(item)
+
                     speech_categories.append(None)
                     identity.append("parent")
                     gender.append(item[2])
@@ -331,6 +418,7 @@ def moral_categories_over_time(parent_child_dict: dict, pure_categories: dict, w
                             pos.append(item[1])
                         else:
                             words.append(item)
+                        
                         speech_categories.append(cat)
                         identity.append("parent")
                         gender.append(item[2])
@@ -358,6 +446,165 @@ def moral_categories_over_time(parent_child_dict: dict, pure_categories: dict, w
         cols = {"year": years, "identity": identity, "words": words, "pos": pos,"gender": gender, "category": speech_categories, "sentiment": sentiment, "type": moral_type, "corpus": corpora}
     else:
         cols = {"year": years, "identity": identity, "words": words,"gender": gender, "category": speech_categories, "sentiment": sentiment, "type": moral_type, "corpus": corpora}
+
+    return pd.DataFrame(cols)
+
+def moral_categories_over_time_by_utterance(parent_child_dict: dict, pure_categories: dict, wildcard_categories: dict, with_pos: bool = True) -> pd.DataFrame:
+    years = []
+    corpora = []
+    morality_keywords = []
+    speech_categories = []
+    identity = []
+    sentiment = []
+    moral_type = []
+    context = []
+
+    for corpus in parent_child_dict["parent"]:
+        parent_dict = parent_child_dict["parent"]
+        child_dict = parent_child_dict["child"]
+        print(corpus)
+        print("child")
+        for age in child_dict[corpus]:
+            print(age)
+            year, month, _ = age
+            year_frac = year + (month/12)
+
+            for utterance in child_dict[corpus][age]:
+                utterance_words = " ".join([item[0] for item in utterance])
+                if with_pos:
+                    child_no_punct = [item for item in utterance if item[0] not in string.punctuation]
+                else:
+                    child_no_punct = [item for item in utterance if item not in string.punctuation]
+
+                category = []
+                moral_words = []
+                for item in child_no_punct:
+                    if with_pos:
+                        word = item[0]
+                    else:
+                        word = item
+                    if word in pure_categories:
+                        category.append(pure_categories[word])
+                        moral_words.append([word])
+                    elif any(key[:-1] in word for key in wildcard_categories):
+                        for key in wildcard_categories:
+                            if key[:-1] in word:
+                                category.append(wildcard_categories[key])
+                                moral_words.append([word])
+
+                if category == []:
+                    years.append(year_frac)
+                    corpora.append(corpus)
+                    speech_categories.append(None)
+                    identity.append("child")
+                    sentiment.append(None)
+                    moral_type.append(None)
+                    context.append(utterance_words)
+                    morality_keywords.append(None)
+
+                else:
+                    for i, cat_group in enumerate(category):
+                        for cat in cat_group:
+                            years.append(year_frac)
+                            corpora.append(corpus)
+                            speech_categories.append(cat)
+                            identity.append("child")
+                            context.append(utterance_words)
+                            morality_keywords.append(moral_words[i][0])
+
+                            if "virtue" in cat.lower():
+                                sentiment.append("pos")
+                            elif "vice" in cat.lower():
+                                sentiment.append("neg")
+                            else:
+                                sentiment.append("neu")
+                            
+                            if "Harm" in cat or "care" in cat:
+                                moral_type.append("harm")
+                            elif "Fairness" in cat or "fairness" in cat:
+                                moral_type.append("fairness")
+                            elif "Ingroup" in cat or "loyalty" in cat:
+                                moral_type.append("loyalty")
+                            elif "Authority" in cat or "authority" in cat:
+                                moral_type.append("authority")
+                            elif "Purity" in cat or "sanctity" in cat:
+                                moral_type.append("purity")
+                            else:
+                                moral_type.append("other")
+        print("parent")
+        for age in parent_dict[corpus]:
+            print(age)
+            if age == None:
+                continue
+            year, month, _ = age
+            year_frac = year + (month/12)
+
+            for utterance in parent_dict[corpus][age]:
+                utterance_words = " ".join([item[0] for item in utterance])
+                if with_pos:
+                    parent_no_punct = [item for item in utterance if item[0] not in string.punctuation]
+                else:
+                    parent_no_punct = [item for item in utterance if item not in string.punctuation]
+
+                category = []
+                moral_words = []
+                for item in parent_no_punct:
+                    if with_pos:
+                        word = item[0]
+                    else:
+                        word = item
+                    if word in pure_categories:
+                        category.append(pure_categories[word])
+                        moral_words.append([word])
+                    elif any(key[:-1] in word for key in wildcard_categories):
+                        for key in wildcard_categories:
+                            if key[:-1] in item:
+                                category.append(wildcard_categories[key])
+                                moral_words.append([word])
+                #if len(category) != 0:
+                    #pdb.set_trace()
+                if category == []:
+                    years.append(year_frac)
+                    corpora.append(corpus)
+                    speech_categories.append(None)
+                    identity.append("parent")
+                    sentiment.append(None)
+                    moral_type.append(None)
+                    context.append(utterance_words)
+                    morality_keywords.append(None)
+                else:
+                    for i, cat_group in enumerate(category):
+                        for cat in cat_group:
+                            years.append(year_frac)
+                            corpora.append(corpus)
+                            speech_categories.append(cat)
+                            identity.append("parent")
+                            context.append(utterance_words)
+                            morality_keywords.append(moral_words[i][0])
+                          
+
+                            if "virtue" in cat.lower():
+                                sentiment.append("pos")
+                            elif "vice" in cat.lower():
+                                sentiment.append("neg")
+                            else:
+                                sentiment.append("neu")
+                            
+                            if "Harm" in cat or "care" in cat:
+                                moral_type.append("harm")
+                            elif "Fairness" in cat or "fairness" in cat:
+                                moral_type.append("fairness")
+                            elif "Ingroup" in cat or "loyalty" in cat:
+                                moral_type.append("loyalty")
+                            elif "Authority" in cat or "authority" in cat:
+                                moral_type.append("authority")
+                            elif "Purity" in cat or "sanctity" in cat:
+                                moral_type.append("purity")
+                            else:
+                                moral_type.append("other")
+
+    cols = {"year": years, "identity": identity, "category": speech_categories, "sentiment": sentiment, "type": moral_type, "corpus": corpora, "context": context, "keywords": morality_keywords}
+
     return pd.DataFrame(cols)
 
 def extract_modal_sentences(corpora_list: List, out_filename: str = "./data/modal_sentences.txt") -> List:
@@ -476,6 +723,7 @@ def extract_category_sentences(corpora_list: List, category_names: List, pure_ca
 
 
 if __name__ == "__main__":
+    #read_all_corpora_by_utterance(corpora, append_pos=True, lemmatize=True)
     #read_all_corpora(corpora, out_filename="./data/childes-dict-lemmatized.p", append_pos=True, lemmatize=True)
     #assert False
 
@@ -487,12 +735,18 @@ if __name__ == "__main__":
     pure_categories_v2 = {cat: val for cat, val in categories_v2.items() if cat[-1] != "*"}
     categories_mfd_1 = ["HarmVirtue", "HarmVice", "FairnessVirtue", "FairnessVice", "IngroupVirtue", "IngroupVice", "AuthorityVirtue", "AuthorityVice", "PurityVirtue", "PurityVice", "MoralityGeneral"]
     categories_mfd_2 = ["care.virtue", "care.vice", "fairness.virtue", "fairness.vice", "loyalty.virtue", "loyalty.vice", "authority.virtue", "authority.vice", "sanctity.virtue", "sanctity.vice"]
+    categories_mfd_combined = ["care.virtue", "care.vice", "fairness.virtue", "fairness.vice", "loyalty.virtue", "loyalty.vice", "authority.virtue", "authority.vice", "sanctity.virtue", "sanctity.vice", "morality.general"]
+
     #extract_category_sentences(corpora, categories_mfd_2, pure_categories_v2, wildcard_categories_v2, "./data/sample-sentences/")
     #assert False
     categories_v2 = read_mfd("./data/mfd2.0.dic", version=2)
     wildcard_categories_v2 = {cat: val for cat, val in categories_v2.items() if cat[-1] == "*"}
     pure_categories_v2 = {cat: val for cat, val in categories_v2.items() if cat[-1] != "*"}
-    parent_child_dict = pickle.load(open("./data/childes-dict-lemmatized.p", "rb"))
-    moral_df = moral_categories_over_time(parent_child_dict, with_pos=True, pure_categories=pure_categories, wildcard_categories=wildcard_categories)
-    moral_df.to_pickle("./data/moral_df_lemma.p")
+    parent_child_dict = pickle.load(open("./data/childes-dict-utterances.p", "rb"))
+
+    categories_combined = read_mfd("./data/mfd-combined.dic", version=2)
+    wildcard_categories_combined = {cat: val for cat, val in categories_combined.items() if cat[-1] == "*"}
+    pure_categories_combined = {cat: val for cat, val in categories_combined.items() if cat[-1] != "*"}
+    moral_df = moral_categories_over_time_by_utterance(parent_child_dict, with_pos=True, pure_categories=pure_categories_combined, wildcard_categories=wildcard_categories_combined)
+    moral_df.to_pickle("./data/moral_df_context_combined.p")
     #find_mfd_childes_intersection(parent_child_dict)
