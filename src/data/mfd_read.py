@@ -31,7 +31,10 @@ def read_mfd(in_filename: str, version: int = 1, return_categories: bool = False
                     pattern_cats = line[0].split("\t")
                 pattern = pattern_cats[0]
                 cats = pattern_cats[1:]
-                word_to_cat[pattern] = [categories[cat_num] for cat_num in cats]
+                if pattern not in word_to_cat:
+                    word_to_cat[pattern] = [categories[cat_num] for cat_num in cats]
+                else:
+                    word_to_cat[pattern].extend([categories[cat_num] for cat_num in cats])
     
     if return_categories:
         return word_to_cat, categories

@@ -5,13 +5,13 @@ import pandas as pd
 from src.data.clustering_models import *
 from sentence_transformers import SentenceTransformer
 from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
 import pdb
 
 map_categories = {'care.virtue': 'harm', 'care.vice': 'harm', 'authority.virtue': 'authority',
                   'authority.vice': 'authority', 'loyalty.virtue': 'loyalty', 'loyalty.vice': 'loyalty',
                   'fairness.virtue': 'fairness', 'fairness.vice': 'fairness', 'sanctity.virtue':'purity', 'sanctity.vice':'purity', 'MoralityGeneral': 'general'}
-
-
 
 
 models = ['Kmeans', 'GMM']
@@ -43,6 +43,7 @@ def select_story_data(data: pd.DataFrame, lower_quantile_val: float, upper_quant
 def get_embeddings(data: list) -> np.array:
     model = SentenceTransformer('bert-base-nli-mean-tokens')
     vectors = np.array([model.encode(x) for x in data])
+
     return vectors
 
 
@@ -82,6 +83,10 @@ def prepare_visualization(vectors_of_ages):
 
     all_data = np.concatenate(vectors_of_ages)
 
+    if dim_reduction:
+        pca = PCA(n_components=50)
+        all_data = pca.fit_transform(vectors_of_ages)
+
 
     compressed = TSNE(n_components=2).fit_transform(all_data)
     print(np.shape(vectors_of_ages), np.shape(all_data), np.shape(compressed))
@@ -94,7 +99,7 @@ def prepare_visualization(vectors_of_ages):
 
     return compressed_vectors_of_ages
 
-def train_clustering_model(name, data):
+def train_clustering_model(name, data, dim_reduction: int = 200):
     if name == 'Kmeans':
         model= KmeansModel()
 
@@ -102,13 +107,26 @@ def train_clustering_model(name, data):
         model = GMM()
 
 
-
     vectors = get_embeddings(data)
+
+    if dim_reduction:
+        pca = PCA(n_components=dim_reduction)
+        vectors = pca.fit_transform(vectors)
 
     best_k, labels, best_clustering_model = model.find_k(vectors)
 
-    return best_k, labels,model, vectors
+    return best_k, labels, model, vectors, pca
 
+
+def find_explained_variance(vectors, out_filename, max_dimensions=300) -> None:
+    pca = PCA(n_components=max_dimensions)
+    vectors = pca.fit_transform(vectors)
+    exp_car_cumul = np.cumsum(pca.explained_variance_ratio_)
+    plt.plot(range(1, exp_car_cumul.shape[0] + 1), exp_car_cumul)
+    plt.xlabel("Number of features")
+    plt.ylabel("explained variance")
+    plt.savefig(f"{out_filename}.png")
+    np.savetxt(f"{out_filename}.csv", exp_car_cumul)
 
 
 def category_cluster_by_age(childes_data: pd.DataFrame, category, model_name, text_type: str = "childes"):
@@ -183,7 +201,7 @@ def category_cluster(childes_data: pd.DataFrame, category, model_name):
                     open(os.path.join('data', model_name, category, f'{age}_all.pkl'), 'wb'))
 
 
-def category_cluster_stories(stories_data: pd.DataFrame, category, model_name) -> None:
+def category_cluster_stories(stories_data: pd.DataFrame, category, model_name, dim_reduction: int = 200) -> None:
     all_utterances =  []
     age_utterances = []
     age_vectors = []
@@ -198,8 +216,9 @@ def category_cluster_stories(stories_data: pd.DataFrame, category, model_name) -
         age_vectors.append(vectors)
         all_utterances += data
 
-    best_k, labels, model, vectors = train_clustering_model(model_name, all_utterances)
+    best_k, labels, model, vectors, pca_model = train_clustering_model(model_name, all_utterances, dim_reduction=dim_reduction)
     compressed_vectors = prepare_visualization(age_vectors)
+    age_vectors = pca_model.transform(age_vectors)
 
     for i, age in enumerate(quantiles):
         if i == len(quantiles) - 1:
@@ -228,16 +247,19 @@ def category_cluster_stories(stories_data: pd.DataFrame, category, model_name) -
 if __name__ == '__main__':
     df = pickle.load(open('data/moral_df_context_2.p', 'rb'))
     df_stories = pickle.load(open("data/story-sentences-v2.p", "rb"))
-    
-        #
+            #
     # for m in models:
     #     for c in categories:
     #         category_cluster_by_age(df,c, m)
 
 
     for m in models:
+        if m != "Kmeans":
+            continue
         for c in categories:
-            category_cluster_stories(df_stories, c, m)
+            if c != "fairness":
+                continue
+            category_cluster_stories(df_stories, c, m, dim_reduction=200)
 
 
 
