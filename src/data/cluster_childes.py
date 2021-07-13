@@ -83,11 +83,6 @@ def prepare_visualization(vectors_of_ages):
 
     all_data = np.concatenate(vectors_of_ages)
 
-    if dim_reduction:
-        pca = PCA(n_components=50)
-        all_data = pca.fit_transform(vectors_of_ages)
-
-
     compressed = TSNE(n_components=2).fit_transform(all_data)
     print(np.shape(vectors_of_ages), np.shape(all_data), np.shape(compressed))
     compressed_vectors_of_ages = []
