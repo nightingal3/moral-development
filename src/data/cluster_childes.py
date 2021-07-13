@@ -79,8 +79,7 @@ def prepare_visualization(vectors_of_ages):
 
     data_lens = [len(d) for d in vectors_of_ages]
 
-    # all_data = np.array(reduce(operator.concat, vectors_of_ages))
-
+    #all_data = np.array(reduce(operator.concat, vectors_of_ages))
     all_data = np.concatenate(vectors_of_ages)
 
     compressed = TSNE(n_components=2).fit_transform(all_data)
@@ -213,7 +212,7 @@ def category_cluster_stories(stories_data: pd.DataFrame, category, model_name, d
 
     best_k, labels, model, vectors, pca_model = train_clustering_model(model_name, all_utterances, dim_reduction=dim_reduction)
     compressed_vectors = prepare_visualization(age_vectors)
-    age_vectors = pca_model.transform(age_vectors)
+    age_vectors = [pca_model.transform(vectors) for vectors in age_vectors]
 
     for i, age in enumerate(quantiles):
         if i == len(quantiles) - 1:
@@ -242,6 +241,7 @@ def category_cluster_stories(stories_data: pd.DataFrame, category, model_name, d
 if __name__ == '__main__':
     df = pickle.load(open('data/moral_df_context_2.p', 'rb'))
     df_stories = pickle.load(open("data/story-sentences-v2.p", "rb"))
+    df_partial = df_stories.head(1000)
             #
     # for m in models:
     #     for c in categories:
@@ -254,7 +254,7 @@ if __name__ == '__main__':
         for c in categories:
             if c != "fairness":
                 continue
-            category_cluster_stories(df_stories, c, m, dim_reduction=200)
+            category_cluster_stories(df_stories, c, m, dim_reduction=50)
 
 
 
